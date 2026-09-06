@@ -1,12 +1,44 @@
+from dataclasses import dataclass
+
 import logging
 
 import struct
 
 
-logger = logging.getLogger("Monitor.{__name__}")
+logger = logging.getLogger(f"Monitor.{__name__}")
 
 
-def parse_atc_payload(raw_bytes) -> dict | None:
+@dataclass
+class Payload:
+    format: str
+    temperature_c: float
+    humidity_pct: float
+    battery_mv: int
+    battery_pct: int
+    frame_counter: int
+
+    def __post_init__(self):
+        """Validate payload fields after initialization."""
+        if not isinstance(self.battery_mv, int):
+            raise ValueError(f"battery_mv must be an integer, got {type(self.battery_mv)}")
+
+        if not (1500 < self.battery_mv < 4000):
+            raise ValueError(f"battery_mv must be between 1500 and 4000, got {self.battery_mv}")
+
+        if not isinstance(self.battery_pct, int):
+            raise ValueError(f"battery_pct must be an integer, got {type(self.battery_pct)}")
+
+        if not (0 <= self.battery_pct <= 100):
+            raise ValueError(f"battery_pct must be between 0 and 100, got {self.battery_pct}")
+
+        if not (-40.0 <= self.temperature_c <= 85.0):
+            raise ValueError(f"temperature_c out of reasonable range: {self.temperature_c}")
+
+        if not (0.0 <= self.humidity_pct <= 100.0):
+            raise ValueError(f"humidity_pct must be between 0 and 100, got {self.humidity_pct}")
+
+
+def parse_atc_payload(raw_bytes) -> Payload | None:
     if not raw_bytes:
         logger.debug("parse_atc_payload empty")
         return None
@@ -60,11 +92,7 @@ def parse_atc_payload(raw_bytes) -> dict | None:
             }
         else:
             return None
-        battery_mv = payload.get("battery_mv", None)
-        if not battery_mv or (not isinstance(battery_mv, float)) or (not (1500 < battery_mv < 4000)):
-            logger.error("Parse error: battery_mv")
-            return None
-        return payload
+        return Payload(**payload)
     except ValueError as e:
         logger.error(f"Parse error: {s}")
         return None

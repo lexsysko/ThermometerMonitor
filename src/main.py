@@ -11,7 +11,8 @@ from bleak.exc import BleakBluetoothNotAvailableError
 from dotenv import load_dotenv
 from typing import Callable
 
-from parser import parse_atc_payload
+from parser import parse_atc_payload, Payload
+from watchdog import bluetooth_watchdog
 
 BASE_PATH = Path(__file__).parent.parent
 
@@ -40,6 +41,8 @@ db_queue = asyncio.Queue()
 last_frame_counter = {}
 # Track timestamp of the last received advertisement packet
 last_packet_time = time.time()
+
+last_counter_data = {"last_packet_time": time.time()}
 
 
 def init_db(db_path=DB_PATH):
@@ -81,8 +84,7 @@ def generate_device_name(device):
 async def ble_callback(device, advertising_data):
     if shutdown_event.is_set():
         return
-    global last_packet_time
-    last_packet_time = time.time()
+    last_counter_data["last_packet_time"] = time.time()
     await asyncio.sleep(0.01)
 
     name = advertising_data.local_name or device.name or generate_device_name(device) or device.address or ""
@@ -101,13 +103,13 @@ async def ble_callback(device, advertising_data):
     if not raw_data:
         return
 
-    parsed = parse_atc_payload(raw_data)
+    parsed: Payload | None = parse_atc_payload(raw_data)
 
     if not parsed:
         return
 
     # Deduplication Logic
-    frame_counter = parsed.get("frame_counter")
+    frame_counter = parsed.frame_counter
     if frame_counter is not None:
         # Skip if frame_counter matches the last seen frame
         if last_frame_counter.get(name) == frame_counter:
@@ -123,12 +125,12 @@ async def ble_callback(device, advertising_data):
         device.address,
         name,
         advertising_data.rssi,
-        parsed["temperature_c"] if parsed else None,
-        parsed["humidity_pct"] if parsed else None,
-        parsed["battery_pct"] if parsed else None,
-        parsed["battery_mv"] if parsed else None,
-        parsed["frame_counter"] if parsed else None,
-        parsed["format"] if parsed else None,
+        parsed.temperature_c,
+        parsed.humidity_pct,
+        parsed.battery_pct,
+        parsed.battery_mv,
+        parsed.frame_counter,
+        parsed.format,
     )
 
     db_queue.put_nowait(record)
@@ -174,33 +176,6 @@ async def db_writer_worker(db_path=DB_PATH):
         flush_batch()
         conn.close()
         logger.info("[DB] Connection closed cleanly.")
-
-
-async def bluetooth_watchdog(timeout_seconds=60):
-    """Monitors packet freshness to catch dead Bluetooth hardware/stack freezes."""
-    global last_packet_time
-    logger.debug(f"[Watchdog] Watchdog active. Packet timeout: {timeout_seconds}s.")
-
-    # Warm-up grace period so initial scanning starts before watchdog checks
-    await asyncio.sleep(timeout_seconds // 3)
-
-    while not shutdown_event.is_set():
-        await asyncio.sleep(timeout_seconds // 4)
-
-        time_since_last_packet = time.time() - last_packet_time
-
-        logger.debug(f"[Watchdog] Heartbeat check | Secs since last packet: {time_since_last_packet:.1f}s")
-
-        # Catch hardware disconnects, stack stalls, and disabled Bluetooth
-        if time_since_last_packet > timeout_seconds:
-            logger.error(
-                f"[Watchdog] BLE stall detected! No packets for {time_since_last_packet:.0f}s. "
-                "Initiating system recovery/shutdown..."
-            )
-            shutdown_event.set()
-            break
-
-    logger.debug("[Watchdog] Watchdog loop exited.")
 
 
 def setup_signal_handlers(loop=None):
