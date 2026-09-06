@@ -1,0 +1,32 @@
+version: '3.8'
+name: t-mon
+services:
+  ble-monitor:
+    build: .
+    network_mode: host
+    init: true
+    stop_grace_period: 15s
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket
+      - monitor_data:/app/data
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_INSTALL_PLUGINS=frser-sqlite-datasource
+      - GF_SECURITY_ADMIN_PASSWORD=admin  # Change on first login
+    volumes:
+      # Mount the SAME data directory read-only into Grafana
+      - monitor_data:/var/lib/grafana/sqlite_data:ro
+      - grafana-storage:/var/lib/grafana
+    restart: unless-stopped
+
+volumes:
+  monitor_data:
+  grafana-storage:
