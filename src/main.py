@@ -1,22 +1,31 @@
-from bleak.exc import BleakBluetoothNotAvailableError
-from typing import Literal, Callable
+from os import environ
+from pathlib import Path
 
 import asyncio
 import logging
 import signal
 import sqlite3
-import struct
 import time
-from pathlib import Path
-
 from bleak import BleakScanner, BleakError
+from bleak.exc import BleakBluetoothNotAvailableError
+from dotenv import load_dotenv
+from typing import Callable
+
+from parser import parse_atc_payload
+
+BASE_PATH = Path(__file__).parent.parent
+
+if (BASE_PATH / ".env").exists():
+    load_dotenv()
 
 # Global Configuration
-NAME_PREFIXES = ("atc",)
-BASE_PATH = Path(__file__).parent.parent
+SCANNING_MODE = environ.get("SCANNING_MODE", "auto")
+WATCHDOG_TIMEOUT = int(environ.get("WATCHDOG_TIMEOUT", 300))
+LOG_LEVEL = getattr(logging, environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
+DEVICE_PREFIX_DEFAULT = environ.get("DEVICE_PREFIX_DEFAULT", "ATC_")
+NAME_PREFIXES: tuple[str] = tuple(s.strip() for s in environ.get("NAME_PREFIXES", "").split(","))
 DB_PATH = BASE_PATH / "data/ble_data.db"
-UUID_ENVIRONMENTAL_SENSING = "0000181a-0000-1000-8000-00805f9b34fb"
-SCANNING_MODE = "auto"
+UUID_ENVIRONMENTAL_SENSING = environ.get("UUID_ENVIRONMENTAL_SENSING", "0000181a-0000-1000-8000-00805f9b34fb")
 
 logger = logging.getLogger("Monitor")
 logging.basicConfig(
@@ -58,83 +67,41 @@ def init_db(db_path=DB_PATH):
     conn.close()
 
 
-def parse_atc_payload(service_data):
-    raw_bytes = service_data.get(UUID_ENVIRONMENTAL_SENSING)
-    if not raw_bytes:
-        logger.debug("parse_atc_payload empty")
-        return None
-
-    length = len(raw_bytes)
-    logger.debug(f"{length=}, {raw_bytes=}")
-    #
-    # """Update the data of a registered BLE device."""
-    # frame_cnt = int.from_bytes(raw_bytes[13:14], byteorder="little", signed=False)
-    # temp_raw = int.from_bytes(raw_bytes[6:8], byteorder="little", signed=True)
-    # hum_raw = (
-    #         int.from_bytes(raw_bytes[8:10], byteorder="little", signed=True)
-    # )
-    # battery_mv = (
-    #         int.from_bytes(raw_bytes[10:12], byteorder="little", signed=False)
-    # )
-    # batt_pct = int.from_bytes(raw_bytes[12:13], byteorder="little", signed=False)
-    #
-    # payload = {
-    #     "format": "pvvx",
-    #     "temperature_c": temp_raw / 100.0,
-    #     "humidity_pct": hum_raw / 100.0,
-    #     "battery_mv": battery_mv,
-    #     "battery_pct": batt_pct,
-    #     "frame_counter": frame_cnt,
-    # }
-
-    # if payload:
-    #     return  payload
-
-    # 1. Custom / pvvx Format (18 bytes, Little-Endian)
-    if length == 18:
-        _, temp_raw, hum_raw, batt_mv, batt_pct, frame_cnt, _ = struct.unpack("<6shHHBBB", raw_bytes)
-        payload = {
-            "format": "pvvx",
-            "temperature_c": temp_raw / 100.0,
-            "humidity_pct": hum_raw / 100.0,
-            "battery_mv": batt_mv,
-            "battery_pct": batt_pct,
-            "frame_counter": frame_cnt,
-        }
-
-    # 2. ATC1441 Format (13 bytes, Big-Endian)
-    elif length == 13:
-        _, temp_raw, hum_raw, batt_pct, batt_mv, frame_cnt = struct.unpack(">6shBBHB", raw_bytes)
-        payload = {
-            "format": "atc1441",
-            "temperature_c": temp_raw / 10.0,
-            "humidity_pct": float(hum_raw),
-            "battery_mv": batt_mv,
-            "battery_pct": batt_pct,
-            "frame_counter": frame_cnt,
-        }
+def generate_device_name(device):
+    """Generate a default name if none is provided."""
+    if ":" in device.address:
+        uuid = "".join(device.address.split(":")[-3:])
     else:
-        return None
-    return payload
+        uuid = device.address.split("-")[-1][-6:]
+    if uuid:
+        return DEVICE_PREFIX_DEFAULT + uuid
+    return None
 
 
-def ble_callback(device, advertising_data):
+async def ble_callback(device, advertising_data):
     if shutdown_event.is_set():
         return
     global last_packet_time
     last_packet_time = time.time()
+    await asyncio.sleep(0.01)
 
-    name = advertising_data.local_name or device.name or device.address or ""
-    logger.debug(f"NAME: {name}")
+    name = advertising_data.local_name or device.name or generate_device_name(device) or device.address or ""
+    # logger.debug(f"NAME: {name}")
 
     # # Filter for target prefix (e.g., 'atc')
-    # if not name.lower().startswith(NAME_PREFIXES):
-    #     return
+    if NAME_PREFIXES and not name.lower().startswith(NAME_PREFIXES):
+        return
 
-    logger.debug(f"FILTERED NAME: {name}, {device.address=}")
+    # logger.debug(f"FILTERED NAME: {name}, {device=}")
 
     # Decode advertisement payload
-    parsed = parse_atc_payload(advertising_data.service_data)
+    # logger.debug(f"{advertising_data=}")
+    raw_data = advertising_data.service_data.get(UUID_ENVIRONMENTAL_SENSING)
+
+    if not raw_data:
+        return
+
+    parsed = parse_atc_payload(raw_data)
 
     if not parsed:
         return
@@ -149,7 +116,7 @@ def ble_callback(device, advertising_data):
         # Update last seen frame counter and return payload
         last_frame_counter[name] = frame_counter
 
-    print(parsed)
+    logger.debug(parsed)
 
     record = (
         time.time(),
@@ -209,31 +176,31 @@ async def db_writer_worker(db_path=DB_PATH):
         logger.info("[DB] Connection closed cleanly.")
 
 
-async def bluetooth_watchdog(scanner, timeout_seconds=30):
-    """Monitors scanner status and packet freshness."""
+async def bluetooth_watchdog(timeout_seconds=60):
+    """Monitors packet freshness to catch dead Bluetooth hardware/stack freezes."""
     global last_packet_time
-    logger.debug(f"[Watchdog] Starting bluetooth_watchdog. Timeout set to {timeout_seconds}s.")
+    logger.debug(f"[Watchdog] Watchdog active. Packet timeout: {timeout_seconds}s.")
+
+    # Warm-up grace period so initial scanning starts before watchdog checks
+    await asyncio.sleep(timeout_seconds // 3)
 
     while not shutdown_event.is_set():
+        await asyncio.sleep(timeout_seconds // 4)
+
         time_since_last_packet = time.time() - last_packet_time
-        logger.debug(
-            f"[Watchdog] Status check | Scanner active: {scanner.is_scanning} | "
-            f"Secs since last packet: {time_since_last_packet:.1f}s"
-        )
 
-        if not scanner.is_scanning:
-            logger.error("[Watchdog] BLE scanner stopped unexpectedly.")
-            shutdown_event.set()
-            break
+        logger.debug(f"[Watchdog] Heartbeat check | Secs since last packet: {time_since_last_packet:.1f}s")
 
+        # Catch hardware disconnects, stack stalls, and disabled Bluetooth
         if time_since_last_packet > timeout_seconds:
-            logger.error(f"[Watchdog] Stalled: No BLE packets received for {time_since_last_packet:.0f}s.")
+            logger.error(
+                f"[Watchdog] BLE stall detected! No packets for {time_since_last_packet:.0f}s. "
+                "Initiating system recovery/shutdown..."
+            )
             shutdown_event.set()
             break
 
-        await asyncio.sleep(5)
-
-    logger.debug("[Watchdog] Exited watchdog loop.")
+    logger.debug("[Watchdog] Watchdog loop exited.")
 
 
 def setup_signal_handlers(loop=None):
@@ -255,12 +222,11 @@ def setup_signal_handlers(loop=None):
     signal.signal(signal.SIGTERM, handle_signal)  # Docker stop / termination
 
 
-async def start_scanning(mode: Literal["active", "passive", "auto"], callback: Callable) -> BleakScanner | None:
+async def start_scanning(mode: str, callback: Callable) -> BleakScanner | None:
     """Start scanning for BLE devices."""
     modes = ("passive", "active") if mode.lower() == "auto" else (mode,)
-    mode: Literal["active", "passive"]
     for mode in modes:
-        logger.info(f"[BLE] Attempting scan for sensors matching prefix {NAME_PREFIXES} in {mode} mode...")
+        logger.info(f"[BLE] Attempting scan for sensors matching prefix '{','.join(NAME_PREFIXES)}' in {mode} mode...")
         try:
             if mode not in ("active", "passive"):
                 raise ValueError("Mode must be either 'active' or 'passive'.")
@@ -290,7 +256,7 @@ async def main():
         return
 
     # Start the watchdog task
-    watchdog_task = asyncio.create_task(bluetooth_watchdog(scanner, timeout_seconds=10))  # noqa
+    watchdog_task = asyncio.create_task(bluetooth_watchdog(timeout_seconds=WATCHDOG_TIMEOUT))  # noqa
 
     logger.info("[BLE] Scanner and Watchdog active. Waiting for events...")
 
