@@ -8,7 +8,7 @@ import struct
 logger = logging.getLogger(f"Monitor.{__name__}")
 
 
-@dataclass
+@dataclass(frozen=True)
 class Payload:
     format: str
     temperature_c: float
@@ -22,8 +22,8 @@ class Payload:
         if not isinstance(self.battery_mv, int):
             raise ValueError(f"battery_mv must be an integer, got {type(self.battery_mv)}")
 
-        if not (1500 < self.battery_mv < 4000):
-            raise ValueError(f"battery_mv must be between 1500 and 4000, got {self.battery_mv}")
+        if not (1000 < self.battery_mv < 3800):
+            raise ValueError(f"battery_mv must be between 1000 and 3800, got {self.battery_mv}")
 
         if not isinstance(self.battery_pct, int):
             raise ValueError(f"battery_pct must be an integer, got {type(self.battery_pct)}")
@@ -45,8 +45,7 @@ def parse_atc_payload(raw_bytes) -> Payload | None:
 
     length = len(raw_bytes)
     hex_array = " ".join(f"{b:02x}" for b in raw_bytes)
-    logger.debug(f"{length=}, {raw_bytes=}")
-    logger.debug(f"Raw bytes (hex): [{hex_array}]")
+    logger.debug(f"{length=}, Raw bytes (hex): [{hex_array}]")
 
     try:
         if length == 15:
@@ -94,5 +93,5 @@ def parse_atc_payload(raw_bytes) -> Payload | None:
             return None
         return Payload(**payload)
     except ValueError as e:
-        logger.error(f"Parse error: {s}")
+        logger.error(f"Parse error: {e}")
         return None

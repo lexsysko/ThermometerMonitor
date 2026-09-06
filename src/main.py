@@ -1,32 +1,26 @@
-from os import environ
-from pathlib import Path
-
 import asyncio
 import logging
-import signal
-import sqlite3
 import time
 from bleak import BleakScanner, BleakError
 from bleak.exc import BleakBluetoothNotAvailableError
-from dotenv import load_dotenv
 from typing import Callable
 
+from db_writer import db_writer_worker
+from db_writer import init_db
+from handler_signal import setup_signal_handlers
 from parser import parse_atc_payload, Payload
+from settings import (
+    SCANNING_MODE,
+    WATCHDOG_TIMEOUT,
+    DEVICE_PREFIX_DEFAULT,
+    NAME_PREFIXES,
+    UUID_ENVIRONMENTAL_SENSING,
+    shutdown_event,
+    db_queue,
+    last_frame_counter,
+    last_counter_data,
+)
 from watchdog import bluetooth_watchdog
-
-BASE_PATH = Path(__file__).parent.parent
-
-if (BASE_PATH / ".env").exists():
-    load_dotenv()
-
-# Global Configuration
-SCANNING_MODE = environ.get("SCANNING_MODE", "auto")
-WATCHDOG_TIMEOUT = int(environ.get("WATCHDOG_TIMEOUT", 300))
-LOG_LEVEL = getattr(logging, environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
-DEVICE_PREFIX_DEFAULT = environ.get("DEVICE_PREFIX_DEFAULT", "ATC_")
-NAME_PREFIXES: tuple[str] = tuple(s.strip() for s in environ.get("NAME_PREFIXES", "").split(","))
-DB_PATH = BASE_PATH / "data/ble_data.db"
-UUID_ENVIRONMENTAL_SENSING = environ.get("UUID_ENVIRONMENTAL_SENSING", "0000181a-0000-1000-8000-00805f9b34fb")
 
 logger = logging.getLogger("Monitor")
 logging.basicConfig(
@@ -35,39 +29,8 @@ logging.basicConfig(
 logger.setLevel(logging.DEBUG)
 logger.debug("DEBUG Started")
 
-shutdown_event = asyncio.Event()
-db_queue = asyncio.Queue()
 
-last_frame_counter = {}
 # Track timestamp of the last received advertisement packet
-last_packet_time = time.time()
-
-last_counter_data = {"last_packet_time": time.time()}
-
-
-def init_db(db_path=DB_PATH):
-    conn = sqlite3.connect(db_path)
-    with conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS atc_sensor_data (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp REAL NOT NULL,
-                mac_address TEXT NOT NULL,
-                device_name TEXT,
-                rssi INTEGER NOT NULL,
-                temperature_c REAL,
-                humidity_pct REAL,
-                battery_pct INTEGER,
-                battery_mv INTEGER,
-                frame_counter INTEGER,
-                payload_format TEXT
-            )
-        """)
-        # Indexes for fast querying by MAC address and time range
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_mac ON atc_sensor_data(mac_address)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_time ON atc_sensor_data(timestamp)")
-        conn.execute("PRAGMA journal_mode = WAL;")
-    conn.close()
 
 
 def generate_device_name(device):
@@ -81,11 +44,10 @@ def generate_device_name(device):
     return None
 
 
-async def ble_callback(device, advertising_data):
+def ble_callback(device, advertising_data):
     if shutdown_event.is_set():
         return
     last_counter_data["last_packet_time"] = time.time()
-    await asyncio.sleep(0.01)
 
     name = advertising_data.local_name or device.name or generate_device_name(device) or device.address or ""
     # logger.debug(f"NAME: {name}")
@@ -94,14 +56,14 @@ async def ble_callback(device, advertising_data):
     if NAME_PREFIXES and not name.lower().startswith(NAME_PREFIXES):
         return
 
-    # logger.debug(f"FILTERED NAME: {name}, {device=}")
-
     # Decode advertisement payload
     # logger.debug(f"{advertising_data=}")
     raw_data = advertising_data.service_data.get(UUID_ENVIRONMENTAL_SENSING)
 
     if not raw_data:
         return
+
+    logger.debug(f"NAME: {name}, {device.address=}")
 
     parsed: Payload | None = parse_atc_payload(raw_data)
 
@@ -134,67 +96,6 @@ async def ble_callback(device, advertising_data):
     )
 
     db_queue.put_nowait(record)
-
-
-async def db_writer_worker(db_path=DB_PATH):
-    conn = sqlite3.connect(db_path)
-    batch = []
-
-    def flush_batch():
-        if not batch:
-            return
-        with conn:
-            conn.executemany(
-                """
-                INSERT INTO atc_sensor_data (
-                    timestamp, mac_address, device_name, rssi,
-                    temperature_c, humidity_pct, battery_pct, battery_mv,
-                    frame_counter, payload_format
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                batch,
-            )
-        logger.info(f"[DB] Saved {len(batch)} sensor readings.")
-        batch.clear()
-
-    try:
-        while not (shutdown_event.is_set() and db_queue.empty()):
-            try:
-                item = await asyncio.wait_for(db_queue.get(), timeout=1.0)
-                batch.append(item)
-                db_queue.task_done()
-
-                if len(batch) >= 10:
-                    flush_batch()
-            except asyncio.TimeoutError:
-                flush_batch()
-    finally:
-        while not db_queue.empty():
-            batch.append(db_queue.get_nowait())
-            db_queue.task_done()
-
-        flush_batch()
-        conn.close()
-        logger.info("[DB] Connection closed cleanly.")
-
-
-def setup_signal_handlers(loop=None):
-    """
-    Cross-platform signal handler setup.
-    Works on both Linux/macOS (Docker) and Windows natively.
-    """
-
-    def handle_signal(sig, frame=None):
-        logger.info(f"\n[System] Received signal {sig}. Triggering graceful shutdown...")
-        # Check if loop is running and thread-safely set the shutdown flag/event
-        if loop and loop.is_running():
-            loop.call_soon_threadsafe(shutdown_event.set)
-        else:
-            shutdown_event.set()
-
-    # Standard signal bindings compatible with Windows and Linux
-    signal.signal(signal.SIGINT, handle_signal)  # Ctrl+C
-    signal.signal(signal.SIGTERM, handle_signal)  # Docker stop / termination
 
 
 async def start_scanning(mode: str, callback: Callable) -> BleakScanner | None:

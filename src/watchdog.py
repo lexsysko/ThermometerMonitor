@@ -9,7 +9,8 @@ logger = logging.getLogger(f"Monitor.{__name__}")
 
 
 async def bluetooth_watchdog(timeout_seconds=60):
-    from main import shutdown_event, last_counter_data
+    from settings import last_counter_data
+    from settings import shutdown_event
 
     """Monitors packet freshness to catch dead Bluetooth hardware/stack freezes."""
     logger.debug(f"[Watchdog] Watchdog active. Packet timeout: {timeout_seconds}s.")
