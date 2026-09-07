@@ -54,10 +54,10 @@ def ble_callback(device, advertising_data):
         logger.debug(f"NAME: {name}, {device.address=}")
 
     # # Filter for target prefix (e.g., 'atc')
-    if NAME_PREFIXES and not name.lower().startswith(NAME_PREFIXES):
+    if NAME_PREFIXES[0] and (not name.lower().startswith(NAME_PREFIXES)):
         return
     # # Filter for addresses prefix (e.g., 'A4:')
-    if ADDRESS_PREFIXES and not device.address.lower().startswith(ADDRESS_PREFIXES):
+    if ADDRESS_PREFIXES[0] and (not device.address.lower().startswith(ADDRESS_PREFIXES)):
         return
 
     # Decode advertisement payload

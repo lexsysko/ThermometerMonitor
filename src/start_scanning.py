@@ -57,9 +57,9 @@ async def start_scanning(mode: str, callback: Callable) -> BleakScanner | None:
     modes = ("passive", "active") if mode.lower() == "auto" else (mode,)
     options = {}
     filter_list = []
-    if len(NAME_PREFIXES) > 1:
+    if NAME_PREFIXES[0]:
         filter_list.append(f"Names: {','.join(NAME_PREFIXES)}")
-    if len(ADDRESS_PREFIXES) > 1:
+    if ADDRESS_PREFIXES[0]:
         filter_list.append(f"Addresses: {','.join(ADDRESS_PREFIXES)}")
 
     for mode in modes:
