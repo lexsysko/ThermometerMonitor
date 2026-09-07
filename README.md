@@ -88,14 +88,15 @@ cp dot.env.example .env
 
 ### Environment Variables
 
-| Variable                     | Default                                | Description                                                                     |
-|:-----------------------------|:---------------------------------------|:--------------------------------------------------------------------------------|
-| `NAME_PREFIXES`              | `""` *(empty / all)*                   | Comma-separated list of device name prefixes to filter (e.g. `ATC_112233,ATC_`) |
-| `DEVICE_PREFIX_DEFAULT`      | `ATC_`                                 | Prefix prepended to device names when an explicit name is absent                |
-| `LOG_LEVEL`                  | `INFO`                                 | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`)                             |
-| `SCANNING_MODE`              | `auto`                                 | BLE scanning mode (`auto`, `active`, `passive`)                                 |
-| `WATCHDOG_TIMEOUT`           | `300`                                  | Inactivity threshold in seconds before watchdog flags a stall                   |
-| `UUID_ENVIRONMENTAL_SENSING` | `0000181a-0000-1000-8000-00805f9b34fb` | BLE Service Data UUID for Environmental Sensing (181A)                          |
+| Variable                     | Default                                | Description                                                                                 |
+|:-----------------------------|:---------------------------------------|:--------------------------------------------------------------------------------------------|
+| `NAME_PREFIXES`              | `""` *(empty / all)*                   | Comma-separated list of device name prefixes to filter (e.g. `ATC_112233,ATC_`)             |
+| `ADDRESS_PREFIXES`           | `""` *(empty / all)*                   | Comma-separated list of device addresess prefixes to filter (e.g. `A1:C1:18:11:22:33,A1..`) |
+| `DEVICE_PREFIX_DEFAULT`      | `ATC_`                                 | Prefix prepended to device names when an explicit name is absent                            |
+| `LOG_LEVEL`                  | `INFO`                                 | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`)                                         |
+| `SCANNING_MODE`              | `auto`                                 | BLE scanning mode (`auto`, `active`, `passive`)                                             |
+| `WATCHDOG_TIMEOUT`           | `600`                                  | Inactivity threshold in seconds before watchdog flags a stall                               |
+| `UUID_ENVIRONMENTAL_SENSING` | `0000181a-0000-1000-8000-00805f9b34fb` | BLE Service Data UUID for Environmental Sensing (181A)                                      |
 
 ---
 
@@ -115,7 +116,7 @@ cp dot.env.example .env
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-username/TermometerMonitor.git
+   git clone https://github.com/lexsysko/TermometerMonitor.git
    cd TermometerMonitor
    ```
 
