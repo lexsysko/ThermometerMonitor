@@ -1,11 +1,20 @@
-version: '3.8'
 name: t-mon
 services:
   ble-monitor:
     build: .
+    env_file:
+      - .env
+
+    #    environment:
+    #      SCANNING_MODE: active
+
     network_mode: host
     init: true
     stop_grace_period: 15s
+    # Disable AppArmor confinement for raw D-Bus socket access
+    security_opt:
+      - apparmor:unconfined
+    #    privileged: true
     cap_add:
       - NET_ADMIN
       - NET_RAW

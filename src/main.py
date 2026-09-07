@@ -1,9 +1,6 @@
 import asyncio
 import logging
 import time
-from bleak import BleakScanner, BleakError
-from bleak.exc import BleakBluetoothNotAvailableError
-from typing import Callable
 
 from db_writer import db_writer_worker
 from db_writer import init_db
@@ -19,7 +16,10 @@ from settings import (
     db_queue,
     last_frame_counter,
     last_counter_data,
+    ADDRESS_PREFIXES,
+    DEBUG_EVENTS,
 )
+from start_scanning import start_scanning
 from watchdog import bluetooth_watchdog
 
 logger = logging.getLogger("Monitor")
@@ -50,10 +50,14 @@ def ble_callback(device, advertising_data):
     last_counter_data["last_packet_time"] = time.time()
 
     name = advertising_data.local_name or device.name or generate_device_name(device) or device.address or ""
-    # logger.debug(f"NAME: {name}")
+    if DEBUG_EVENTS:
+        logger.debug(f"NAME: {name}, {device.address=}")
 
     # # Filter for target prefix (e.g., 'atc')
     if NAME_PREFIXES and not name.lower().startswith(NAME_PREFIXES):
+        return
+    # # Filter for addresses prefix (e.g., 'A4:')
+    if ADDRESS_PREFIXES and not device.address.lower().startswith(ADDRESS_PREFIXES):
         return
 
     # Decode advertisement payload
@@ -62,8 +66,6 @@ def ble_callback(device, advertising_data):
 
     if not raw_data:
         return
-
-    logger.debug(f"NAME: {name}, {device.address=}")
 
     parsed: Payload | None = parse_atc_payload(raw_data)
 
@@ -80,7 +82,7 @@ def ble_callback(device, advertising_data):
         # Update last seen frame counter and return payload
         last_frame_counter[name] = frame_counter
 
-    logger.debug(parsed)
+    logger.debug(f"{name}: {parsed}")
 
     record = (
         time.time(),
@@ -96,25 +98,6 @@ def ble_callback(device, advertising_data):
     )
 
     db_queue.put_nowait(record)
-
-
-async def start_scanning(mode: str, callback: Callable) -> BleakScanner | None:
-    """Start scanning for BLE devices."""
-    modes = ("passive", "active") if mode.lower() == "auto" else (mode,)
-    for mode in modes:
-        logger.info(f"[BLE] Attempting scan for sensors matching prefix '{','.join(NAME_PREFIXES)}' in {mode} mode...")
-        try:
-            if mode not in ("active", "passive"):
-                raise ValueError("Mode must be either 'active' or 'passive'.")
-            scanner = BleakScanner(callback, scanning_mode=mode)
-            await scanner.start()
-            return scanner
-        except BleakBluetoothNotAvailableError as e:
-            logger.error(f"Error in {mode} mode: {e}")
-            return None
-        except BleakError as e:
-            logger.error(f"Error in {mode} mode: {e}")
-    return None
 
 
 async def main():
@@ -134,7 +117,7 @@ async def main():
     # Start the watchdog task
     watchdog_task = asyncio.create_task(bluetooth_watchdog(timeout_seconds=WATCHDOG_TIMEOUT))  # noqa
 
-    logger.info("[BLE] Scanner and Watchdog active. Waiting for events...")
+    logger.info("[BLE] Scanner and Watchdog are running. Waiting for events...")
 
     await shutdown_event.wait()
 

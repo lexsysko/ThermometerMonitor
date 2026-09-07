@@ -180,6 +180,65 @@ This project is tested and compatible with:
     - [atc1441/ATC_MiThermometer](https://github.com/atc1441/ATC_MiThermometer)
 - Any BLE broadcaster sending standard `0x181A` environmental service advertisement payloads.
 
+## Ubuntu server headless
+
+```bash
+# 1. Install bluez on the host if missing
+sudo apt update && sudo apt install -y bluez rfkill
+
+# 2. Check if bluetooth is blocked by rfkill
+sudo rfkill unblock bluetooth
+
+# 3. Enable and start the Bluetooth service
+sudo systemctl enable --now bluetooth
+
+# 4. Verify BlueZ is active and registered on D-Bus
+sudo systemctl status bluetooth
+```
+
+### Resolve problems with passive mode
+
+BlueZ passive scanning with advertisement pattern filtering requires both Kernel >= 5.10 and the BlueZ experimental interface flag
+enabled on the host machine.
+
+Without --experimental turned on in the host's bluetooth.service, BlueZ refuses to expose the AdvertisementMonitor1 D-Bus
+interface that Bleak relies on for passive pattern filtering.
+
+#### Solution: Enable BlueZ Experimental Features on Host
+
+1. Edit the host's systemd service for Bluetooth:
+
+```bash
+sudo systemctl edit bluetooth.service
+```
+
+2. Add the experimental flag:
+   Paste the following configuration into the file override and save:
+
+```toml
+[Service]
+ExecStart =
+ExecStart = /usr/libexec/bluetooth/bluetoothd --experimental
+```
+
+> (Note: On older Ubuntu versions, the binary path might be /usr/lib/bluetooth/bluetoothd).
+
+3. Reload systemd and restart the service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart bluetooth
+ 
+```
+
+4. Verify --experimental is active:
+
+```bash
+systemctl status bluetooth
+```
+
+Look for `bluetoothd --experimental` in the active process line.
+
 ---
 
 ## License

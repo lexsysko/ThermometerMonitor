@@ -13,13 +13,13 @@ async def bluetooth_watchdog(timeout_seconds=60):
     from settings import shutdown_event
 
     """Monitors packet freshness to catch dead Bluetooth hardware/stack freezes."""
-    logger.debug(f"[Watchdog] Watchdog active. Packet timeout: {timeout_seconds}s.")
 
+    logger.debug(f"[Watchdog] Watchdog activated. Packet timeout: {timeout_seconds}s.")
     # Warm-up grace period so initial scanning starts before watchdog checks
     await asyncio.sleep(timeout_seconds // 3)
 
     while not shutdown_event.is_set():
-        await asyncio.sleep(timeout_seconds // 4)
+        await asyncio.sleep(timeout_seconds // 10)
         last_packet_time: float = last_counter_data.get("last_packet_time", 0.0)
         time_since_last_packet = time.time() - last_packet_time
 

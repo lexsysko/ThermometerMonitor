@@ -4,6 +4,7 @@ import logging
 
 import struct
 
+from settings import DEBUG_EVENTS
 
 logger = logging.getLogger(f"Monitor.{__name__}")
 
@@ -44,8 +45,9 @@ def parse_atc_payload(raw_bytes) -> Payload | None:
         return None
 
     length = len(raw_bytes)
-    hex_array = " ".join(f"{b:02x}" for b in raw_bytes)
-    logger.debug(f"{length=}, Raw bytes (hex): [{hex_array}]")
+    if DEBUG_EVENTS:
+        hex_array = " ".join(f"{b:02x}" for b in raw_bytes)
+        logger.debug(f"{length=}, Raw bytes (hex): [{hex_array}]")
 
     try:
         if length == 15:

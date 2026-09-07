@@ -19,13 +19,24 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:${PYTHON_VER}-slim AS runner
 
+# Install system dependencies for BlueZ communication
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bluez \
+    dbus \
+    libglib2.0-0 \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
 ARG _USER=appuser
 ARG _GROUP=appgroup
 ARG APP_PORT
 
-RUN groupadd ${_GROUP} && useradd --no-log-init -r --no-create-home -g ${_GROUP} ${_USER}
-
 WORKDIR /app
+
+RUN groupadd ${_GROUP} && useradd --no-log-init -r --no-create-home -g ${_GROUP} ${_USER} && \
+    mkdir ./data && \
+    chown -R  ${_USER}:${_GROUP} ./data
+
 
 # Copy venv from previous stage "builder"
 COPY --from=builder /opt/.venv /opt/.venv
@@ -35,30 +46,7 @@ COPY --chmod=+x ./entrypoint.sh .
 
 ENV PATH="/opt/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=./src
 
-USER ${_USER}
+#USER ${_USER}
 
 CMD ["/bin/bash", "-c", "/app/entrypoint.sh"]
 
-
-
-
-
-
-
-
-FROM python:3.14-slim
-
-# Install system dependencies for BlueZ communication
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    bluez \
-    dbus \
-    libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-RUN pip install --no-cache-dir bleak
-
-COPY monitor.py .
-
-CMD ["python", "-u", "monitor.py"]
