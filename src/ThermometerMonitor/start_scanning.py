@@ -28,7 +28,7 @@ async def aio_bt_scanner(callback: Callable, scanning_mode: str = "passive", **k
 
     logger.info("Load 'aioblescan' library for access to HCI Event")
 
-    import aioblescan as aiobs
+    import aioblescan as aiobs  # noqa
 
     def _hci_process(data):
         ev = aiobs.HCI_Event()

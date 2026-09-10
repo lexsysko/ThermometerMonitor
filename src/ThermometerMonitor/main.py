@@ -93,6 +93,9 @@ def ble_callback(device, advertising_data):
 
 
 async def main():
+    shutdown_event = settings.get_shutdown_event()
+    db_queue = settings.get_db_queue()
+
     init_db()
     loop = asyncio.get_running_loop()
     setup_signal_handlers(loop)
@@ -111,7 +114,7 @@ async def main():
 
     logger.info("[BLE] Scanner and Watchdog are running. Waiting for events...")
 
-    await settings.get_shutdown_event().wait()
+    await shutdown_event.wait()
 
     logger.info("[BLE] Stopping scanner...")
     watchdog_task.cancel()
@@ -136,7 +139,7 @@ async def main():
         logger.warning(f"[BLE] Exception while stopping scanner: {e}")
 
     logger.info("[DB] Flushing remaining queue items...")
-    await settings.get_db_queue().join()
+    await db_queue.join()
     await writer_task
     logger.info("[System] Shutdown complete.")
 
