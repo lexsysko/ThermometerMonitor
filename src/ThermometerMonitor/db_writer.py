@@ -2,12 +2,13 @@ import asyncio
 import logging
 import sqlite3
 
-from settings import DB_PATH, db_queue, shutdown_event
+from ThermometerMonitor.settings import DB_PATH, db_queue, shutdown_event
 
-logger = logging.getLogger(f"Monitor.{__name__}")
+logger = logging.getLogger(__name__)
 
 
 async def db_writer_worker(db_path=DB_PATH):
+    logger.info(f"Used SQLite database on file: {str(DB_PATH)}")
     conn = sqlite3.connect(db_path)
     batch = []
 

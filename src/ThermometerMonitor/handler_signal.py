@@ -1,9 +1,9 @@
 import logging
 import signal
 
-from settings import shutdown_event
+from ThermometerMonitor.settings import shutdown_event
 
-logger = logging.getLogger(f"Monitor.{__name__}")
+logger = logging.getLogger(__name__)
 
 
 def setup_signal_handlers(loop=None):
