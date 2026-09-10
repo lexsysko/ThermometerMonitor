@@ -35,7 +35,7 @@ async def db_writer_worker(db_path=settings.DB_PATH):
     try:
         while not (shutdown_event.is_set() and queue.empty()):
             try:
-                item = await asyncio.wait_for(queue.get(), timeout=1.0)
+                item = await asyncio.wait_for(queue.get(), timeout=15.0)
                 batch.append(item)
                 queue.task_done()
 
