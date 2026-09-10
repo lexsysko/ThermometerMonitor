@@ -1,6 +1,6 @@
 [project]
 name = "ThermometerMonitor"
-version = "0.2.0"
+version = "0.2.1"
 description = "Asynchronous BLE environmental monitor and telemetry logger for smart thermometers."
 authors = [{ name = "lexsys.ko", email = "lexsys.ko@gmail.com" }]
 

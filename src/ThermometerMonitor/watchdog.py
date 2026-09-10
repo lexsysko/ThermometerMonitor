@@ -15,7 +15,7 @@ async def bluetooth_watchdog(timeout_seconds=60):
     # Warm-up grace period so initial scanning starts before watchdog checks
     await asyncio.sleep((timeout_seconds // 3) or 1)
 
-    while not settings.shutdown_event.is_set():
+    while not settings.get_shutdown_event().is_set():
         await asyncio.sleep((timeout_seconds // 10) or 1)
         last_packet_time: float = settings.last_counter_data.get("last_packet_time", 0.0)
         time_since_last_packet = time.time() - last_packet_time
@@ -28,7 +28,7 @@ async def bluetooth_watchdog(timeout_seconds=60):
                 f"[Watchdog] BLE stall detected! No packets for {time_since_last_packet:.0f}s. "
                 "Initiating system recovery/shutdown..."
             )
-            settings.shutdown_event.set()
+            settings.get_shutdown_event().set()
             break
 
     logger.debug("[Watchdog] Watchdog loop exited.")

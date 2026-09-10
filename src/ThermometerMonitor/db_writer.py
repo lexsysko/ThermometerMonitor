@@ -30,20 +30,20 @@ async def db_writer_worker(db_path=settings.DB_PATH):
         batch.clear()
 
     try:
-        while not (settings.shutdown_event.is_set() and settings.db_queue.empty()):
+        while not (settings.get_shutdown_event().is_set() and settings.get_db_queue().empty()):
             try:
-                item = await asyncio.wait_for(settings.db_queue.get(), timeout=1.0)
+                item = await asyncio.wait_for(settings.get_db_queue().get(), timeout=1.0)
                 batch.append(item)
-                settings.db_queue.task_done()
+                settings.get_db_queue().task_done()
 
                 if len(batch) >= 10:
                     flush_batch()
             except asyncio.TimeoutError:
                 flush_batch()
     finally:
-        while not settings.db_queue.empty():
-            batch.append(settings.db_queue.get_nowait())
-            settings.db_queue.task_done()
+        while not settings.get_db_queue().empty():
+            batch.append(settings.get_db_queue().get_nowait())
+            settings.get_db_queue().task_done()
 
         flush_batch()
         conn.close()
