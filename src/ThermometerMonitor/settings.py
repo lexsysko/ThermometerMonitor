@@ -37,8 +37,8 @@ ADDRESS_PREFIXES: tuple[str] = tuple(s.strip().lower() for s in environ.get("ADD
 UUID_ENVIRONMENTAL_SENSING: str = environ.get("UUID_ENVIRONMENTAL_SENSING", "0000181a-0000-1000-8000-00805f9b34fb")
 
 
-shutdown_event = asyncio.Event()
-db_queue = asyncio.Queue()
+shutdown_event = None  # Will be set when asyncio loop is running
+db_queue = None
 
 last_frame_counter = {}
 last_packet_time = time.time()

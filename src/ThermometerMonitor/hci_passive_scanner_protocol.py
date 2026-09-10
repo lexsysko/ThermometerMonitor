@@ -1,12 +1,12 @@
 import asyncio
 import io
+import logging
 import os
 import types
-import logging
 from contextlib import redirect_stdout
 from enum import Enum
 
-from ThermometerMonitor.settings import DEBUG_EVENTS, ADDRESS_PREFIXES
+from ThermometerMonitor.settings import DEBUG_EVENTS
 
 logger = logging.getLogger(__name__)
 

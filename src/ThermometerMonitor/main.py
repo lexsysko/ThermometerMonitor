@@ -6,22 +6,10 @@ from pathlib import Path
 
 from bleak import BleakScanner
 
+from ThermometerMonitor import settings
 from ThermometerMonitor.db_writer import db_writer_worker, init_db
 from ThermometerMonitor.handler_signal import setup_signal_handlers
 from ThermometerMonitor.parser import parse_atc_payload, Payload
-from ThermometerMonitor.settings import (
-    SCANNING_MODE,
-    WATCHDOG_TIMEOUT,
-    DEVICE_PREFIX_DEFAULT,
-    NAME_PREFIXES,
-    UUID_ENVIRONMENTAL_SENSING,
-    shutdown_event,
-    db_queue,
-    last_frame_counter,
-    last_counter_data,
-    ADDRESS_PREFIXES,
-    DEBUG_EVENTS,
-)
 from ThermometerMonitor.start_scanning import start_scanning
 from ThermometerMonitor.watchdog import bluetooth_watchdog
 
@@ -44,29 +32,29 @@ def generate_device_name(device):
     else:
         uuid = device.address.split("-")[-1][-6:]
     if uuid:
-        return DEVICE_PREFIX_DEFAULT + uuid
+        return settings.DEVICE_PREFIX_DEFAULT + uuid
     return None
 
 
 def ble_callback(device, advertising_data):
-    if shutdown_event.is_set():
+    if settings.shutdown_event.is_set():
         return
-    last_counter_data["last_packet_time"] = time.time()
+    settings.last_counter_data["last_packet_time"] = time.time()
 
     name = advertising_data.local_name or device.name or generate_device_name(device) or device.address or ""
-    if DEBUG_EVENTS:
+    if settings.DEBUG_EVENTS:
         logger.debug(f"NAME: {name}, {device.address=}")
 
     # # Filter for target prefix (e.g., 'atc')
-    if NAME_PREFIXES[0] and (not name.lower().startswith(NAME_PREFIXES)):
+    if settings.NAME_PREFIXES[0] and (not name.lower().startswith(settings.NAME_PREFIXES)):
         return
     # # Filter for addresses prefix (e.g., 'A4:')
-    if ADDRESS_PREFIXES[0] and (not device.address.lower().startswith(ADDRESS_PREFIXES)):
+    if settings.ADDRESS_PREFIXES[0] and (not device.address.lower().startswith(settings.ADDRESS_PREFIXES)):
         return
 
     # Decode advertisement payload
     # logger.debug(f"{advertising_data=}")
-    raw_data = advertising_data.service_data.get(UUID_ENVIRONMENTAL_SENSING)
+    raw_data = advertising_data.service_data.get(settings.UUID_ENVIRONMENTAL_SENSING)
 
     if not raw_data:
         return
@@ -80,11 +68,11 @@ def ble_callback(device, advertising_data):
     frame_counter = parsed.frame_counter
     if frame_counter is not None:
         # Skip if frame_counter matches the last seen frame
-        if last_frame_counter.get(name) == frame_counter:
+        if settings.last_frame_counter.get(name) == frame_counter:
             return
 
         # Update last seen frame counter and return payload
-        last_frame_counter[name] = frame_counter
+        settings.last_frame_counter[name] = frame_counter
 
     logger.debug(f"{name}: {parsed}")
 
@@ -101,17 +89,19 @@ def ble_callback(device, advertising_data):
         parsed.format,
     )
 
-    db_queue.put_nowait(record)
+    settings.db_queue.put_nowait(record)
 
 
 async def main():
+    settings.shutdown_event = asyncio.Event()
+    settings.db_queue = asyncio.Queue()
     init_db()
     loop = asyncio.get_running_loop()
     setup_signal_handlers(loop)
 
     writer_task = asyncio.create_task(db_writer_worker())
 
-    scanner = await start_scanning(mode=SCANNING_MODE, callback=ble_callback)
+    scanner = await start_scanning(mode=settings.SCANNING_MODE, callback=ble_callback)
 
     if scanner is None:
         logger.error(f"[BLE] Bluetooth device not found or it disabled. Sleep 10 seconds")
@@ -119,11 +109,11 @@ async def main():
         return
 
     # Start the watchdog task
-    watchdog_task = asyncio.create_task(bluetooth_watchdog(timeout_seconds=WATCHDOG_TIMEOUT))  # noqa
+    watchdog_task = asyncio.create_task(bluetooth_watchdog(timeout_seconds=settings.WATCHDOG_TIMEOUT))  # noqa
 
     logger.info("[BLE] Scanner and Watchdog are running. Waiting for events...")
 
-    await shutdown_event.wait()
+    await settings.shutdown_event.wait()
 
     logger.info("[BLE] Stopping scanner...")
     watchdog_task.cancel()
@@ -148,7 +138,7 @@ async def main():
         logger.warning(f"[BLE] Exception while stopping scanner: {e}")
 
     logger.info("[DB] Flushing remaining queue items...")
-    await db_queue.join()
+    await settings.db_queue.join()
     await writer_task
     logger.info("[System] Shutdown complete.")
 

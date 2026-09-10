@@ -2,13 +2,13 @@ import asyncio
 import logging
 import sqlite3
 
-from ThermometerMonitor.settings import DB_PATH, db_queue, shutdown_event
+from ThermometerMonitor import settings
 
 logger = logging.getLogger(__name__)
 
 
-async def db_writer_worker(db_path=DB_PATH):
-    logger.info(f"Used SQLite database on file: {str(DB_PATH)}")
+async def db_writer_worker(db_path=settings.DB_PATH):
+    logger.info(f"Used SQLite database on file: {str(settings.DB_PATH)}")
     conn = sqlite3.connect(db_path)
     batch = []
 
@@ -30,27 +30,27 @@ async def db_writer_worker(db_path=DB_PATH):
         batch.clear()
 
     try:
-        while not (shutdown_event.is_set() and db_queue.empty()):
+        while not (settings.shutdown_event.is_set() and settings.db_queue.empty()):
             try:
-                item = await asyncio.wait_for(db_queue.get(), timeout=1.0)
+                item = await asyncio.wait_for(settings.db_queue.get(), timeout=1.0)
                 batch.append(item)
-                db_queue.task_done()
+                settings.db_queue.task_done()
 
                 if len(batch) >= 10:
                     flush_batch()
             except asyncio.TimeoutError:
                 flush_batch()
     finally:
-        while not db_queue.empty():
-            batch.append(db_queue.get_nowait())
-            db_queue.task_done()
+        while not settings.db_queue.empty():
+            batch.append(settings.db_queue.get_nowait())
+            settings.db_queue.task_done()
 
         flush_batch()
         conn.close()
         logger.info("[DB] Connection closed cleanly.")
 
 
-def init_db(db_path=DB_PATH):
+def init_db(db_path=settings.DB_PATH):
     conn = sqlite3.connect(db_path)
     with conn:
         conn.execute("""
