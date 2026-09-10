@@ -2,15 +2,14 @@ import asyncio
 import logging
 import time
 from inspect import iscoroutinefunction
-from typing import Callable
+from pathlib import Path
 
 from bleak import BleakScanner
 
-from db_writer import db_writer_worker
-from db_writer import init_db
-from handler_signal import setup_signal_handlers
-from parser import parse_atc_payload, Payload
-from settings import (
+from ThermometerMonitor.db_writer import db_writer_worker, init_db
+from ThermometerMonitor.handler_signal import setup_signal_handlers
+from ThermometerMonitor.parser import parse_atc_payload, Payload
+from ThermometerMonitor.settings import (
     SCANNING_MODE,
     WATCHDOG_TIMEOUT,
     DEVICE_PREFIX_DEFAULT,
@@ -23,10 +22,11 @@ from settings import (
     ADDRESS_PREFIXES,
     DEBUG_EVENTS,
 )
-from start_scanning import start_scanning
-from watchdog import bluetooth_watchdog
+from ThermometerMonitor.start_scanning import start_scanning
+from ThermometerMonitor.watchdog import bluetooth_watchdog
 
-logger = logging.getLogger("Monitor")
+logger = logging.getLogger(Path(__file__).parent.stem)
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
@@ -153,5 +153,9 @@ async def main():
     logger.info("[System] Shutdown complete.")
 
 
-if __name__ == "__main__":
+def run():
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    run()

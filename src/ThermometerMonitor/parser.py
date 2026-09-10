@@ -1,12 +1,10 @@
+import logging
+import struct
 from dataclasses import dataclass
 
-import logging
+from ThermometerMonitor.settings import DEBUG_EVENTS
 
-import struct
-
-from settings import DEBUG_EVENTS
-
-logger = logging.getLogger(f"Monitor.{__name__}")
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)

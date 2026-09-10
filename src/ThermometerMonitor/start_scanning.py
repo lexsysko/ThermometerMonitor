@@ -1,23 +1,20 @@
 import asyncio
-import platform
-
-import re
-
-import subprocess
-
 import logging
+import platform
+import re
+import subprocess
 from types import SimpleNamespace
+from typing import Callable, Any
 
-from bleak import BleakScanner, BlueZScannerArgs, BleakError
+from bleak import BleakScanner, BlueZScannerArgs
 from bleak.args.bluez import OrPattern
 from bleak.assigned_numbers import AdvertisementDataType
 from bleak.exc import BleakBluetoothNotAvailableError
-from typing import Callable, Any
 
-from hci_passive_scanner_protocol import HCIPassiveScannerProtocol
-from settings import NAME_PREFIXES, ADDRESS_PREFIXES
+from ThermometerMonitor.hci_passive_scanner_protocol import HCIPassiveScannerProtocol
+from ThermometerMonitor.settings import NAME_PREFIXES, ADDRESS_PREFIXES
 
-logger = logging.getLogger(f"Monitor.{__name__}")
+logger = logging.getLogger(__name__)
 
 
 def is_linux():

@@ -1,15 +1,30 @@
-from os import environ
-from pathlib import Path
-
 import asyncio
 import logging
 import time
+from os import environ
+from pathlib import Path
+
 from dotenv import load_dotenv
 
-BASE_PATH = Path(__file__).parent.parent
-if (BASE_PATH / ".env").exists():
-    load_dotenv()
-DB_PATH = BASE_PATH / "data/ble_data.db"
+BASE_PATH = Path(__file__).parent.parent.parent
+
+for folder in (Path.cwd(), BASE_PATH):
+    if (folder / ".env").exists():
+        load_dotenv()
+        break
+
+
+db_env_path: str | None = environ.get("DB_PATH")
+
+if db_env_path:
+    DB_PATH = Path(db_env_path).expanduser().resolve()
+else:
+    DB_PATH = BASE_PATH / "data/ble_data.db"
+    if not DB_PATH.parent.exists():
+        # Safe for both CLI package execution and local development
+        DB_PATH = Path.cwd() / "data" / "ble_data.db"
+        DB_PATH.parent.mkdir(exist_ok=True, parents=True)
+
 
 SCANNING_MODE: str = environ.get("SCANNING_MODE", "auto")
 WATCHDOG_TIMEOUT: int = int(environ.get("WATCHDOG_TIMEOUT", 600))

@@ -6,9 +6,9 @@ import logging
 from contextlib import redirect_stdout
 from enum import Enum
 
-from settings import DEBUG_EVENTS, ADDRESS_PREFIXES
+from ThermometerMonitor.settings import DEBUG_EVENTS, ADDRESS_PREFIXES
 
-logger = logging.getLogger(f"Monitor.{__name__}")
+logger = logging.getLogger(__name__)
 
 
 class AdvTypes(Enum):

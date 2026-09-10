@@ -1,9 +1,9 @@
-# TermometerMonitor
+# ThermometerMonitor
 
 [![Python Version](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**TermometerMonitor** is an asynchronous Bluetooth Low Energy (BLE) environmental monitor and telemetry logger. It continuously
+**ThermometerMonitor** is an asynchronous Bluetooth Low Energy (BLE) environmental monitor and telemetry logger. It continuously
 listens for BLE advertising packets broadcast by smart thermometers and hygrometers (such as Xiaomi Mijia / LYWSD03MMC flashed
 with custom **ATC** or **PVVX** firmware), decodes sensor payloads, deduplicates readings, and stores them in a local SQLite
 database.
@@ -138,6 +138,7 @@ cp dot.env.example .env
 | `SCANNING_MODE`              | `auto`                                 | BLE scanning mode (`auto`, `active`, `passive`)                                        |
 | `WATCHDOG_TIMEOUT`           | `600`                                  | Inactivity threshold in seconds before watchdog flags a stall                          |
 | `UUID_ENVIRONMENTAL_SENSING` | `0000181a-0000-1000-8000-00805f9b34fb` | BLE Service Data UUID for Environmental Sensing (181A)                                 |
+| `DB_PATH`                    | `data/ble_data.db`                     | Path to the SQLite database file                                                       |
 
 ---
 
@@ -145,13 +146,13 @@ cp dot.env.example .env
 
 ### Local Setup (macOS / Windows / Linux)
 
-You can run TermometerMonitor directly on your local machine without Docker or elevated root permissions in most OS environments.
+You can run ThermometerMonitor directly on your local machine without Docker or elevated root permissions in most OS environments.
 
 1. **Clone the repository**:
 
 ```bash
-git clone [https://github.com/lexsysko/TermometerMonitor.git](https://github.com/lexsysko/TermometerMonitor.git)
-cd TermometerMonitor
+git clone [https://github.com/lexsysko/ThermometerMonitor.git](https://github.com/lexsysko/ThermometerMonitor.git)
+cd ThermometerMonitor
 ```
 
 2. **Install dependencies**:
@@ -159,7 +160,6 @@ cd TermometerMonitor
 
 ```bash
 uv sync
-
 ```
 
 Or standard `pip`:
@@ -173,13 +173,7 @@ pip install .
 3. **Run the monitor**:
 
 ```bash
-uv run src/main.py
-```
-
-or
-
-```bash
-python src/main.py
+thermometermonitor
 ```
 
 *(Note: On Linux, if using the raw HCI fallback mode, ensure your user account has access to raw socket capabilities or run with
