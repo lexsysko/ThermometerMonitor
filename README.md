@@ -5,16 +5,24 @@
 
 **TermometerMonitor** is an asynchronous Bluetooth Low Energy (BLE) environmental monitor and telemetry logger. It continuously
 listens for BLE advertising packets broadcast by smart thermometers and hygrometers (such as Xiaomi Mijia / LYWSD03MMC flashed
-with custom **ATC** or **PVVX** firmware), decodes the sensor payloads, deduplicates readings, and stores them in a local SQLite
+with custom **ATC** or **PVVX** firmware), decodes sensor payloads, deduplicates readings, and stores them in a local SQLite
 database.
 
-It comes with ready-to-use **Docker Compose** configurations including a **Grafana** dashboard integration for real-time
+It supports **cross-platform operation** (Linux, macOS, Windows) out of the box via **Bleak**, while featuring an **automatic
+Linux raw HCI socket fallback** for legacy adapters or specialized container setups.
+
+It includes ready-to-use **Docker Compose** configurations along with a **Grafana** dashboard integration for real-time
 visualization.
 
 ---
 
 ## Features
 
+- **Cross-Platform BLE Scanning**:
+    - Primary driver powered by **Bleak** for native support across **Linux**, **macOS**, and **Windows**.
+    - **Smart Linux Fallback**: On Linux systems where native passive scanning via BlueZ / BT 5.0 is unavailable or unsupported by
+      the hardware (HCI version < 9), it automatically falls back to a custom **low-level HCI raw socket scanner (`aioblescan` +
+      `HCIPassiveScannerProtocol`)**.
 - **Multi-Format Sensor Parsing**: Supports popular custom firmware advertisement formats:
     - **PVVX 15-byte** (`pvvx_15b`)
     - **PVVX 18-byte** (`pvvx_18b`)
@@ -30,9 +38,41 @@ visualization.
 - **Async Batch Storage**: Queues incoming sensor events and writes them in batches to SQLite with **WAL (Write-Ahead Logging)**
   mode and indexed queries.
 - **Hardware Watchdog**: Monitors packet freshness and initiates graceful recovery if the Bluetooth stack or adapter stalls.
-- **Graceful Shutdown**: Intercepts `SIGINT` (Ctrl+C) and `SIGTERM` signals, flushing buffered telemetry to disk cleanly.
+- **Graceful Shutdown**: Intercepts standard termination signals (`SIGINT`, `SIGTERM`), flushing buffered telemetry to disk
+  cleanly.
 - **Grafana Integration**: Pre-configured `compose.yaml` with the SQLite datasource plugin (`frser-sqlite-datasource`) to
   visualize trends instantly.
+
+---
+
+## Architecture & Scanning Modes
+
+```text
+               +----------------------------------+
+               |      start_scanning(mode)        |
+               +----------------------------------+
+                                |
+               +----------------------------------+
+               |  Is Linux AND Passive Scanning?  |
+               +----------------------------------+
+                     /                      \
+               [ No / Other OS ]          [ Yes ]
+                    /                        \
+                   v                          v
+        +--------------------+      +--------------------+
+        | Standard Bleak     |      | Check BT 5.0      |
+        | Scanner            |      | Capabilities       |
+        | (macOS / Win /     |      +--------------------+
+        | Linux D-Bus)       |         /              \
+        +--------------------+     [Supported]    [Not Supported]
+                                       /              \
+                                      v                v
+                             +------------------+  +--------------------+
+                             | Bleak + BlueZ    |  | Raw HCI Socket     |
+                             | Passive Patterns |  | Fallback Scanner   |
+                             +------------------+  | (aioblescan)       |
+                                                   +--------------------+
+```
 
 ---
 
@@ -40,20 +80,21 @@ visualization.
 
 ```text
 .
-├── compose.yaml          # Docker Compose setup (BLE Monitor + Grafana)
-├── Dockerfile            # Multi-stage container build with uv
-├── dot.env.example       # Sample environment configuration
-├── entrypoint.sh         # Container entrypoint script
-├── pyproject.toml        # Project metadata and dependencies
+├── compose.yaml                      # Docker Compose setup (BLE Monitor + Grafana)
+├── Dockerfile                        # Multi-stage container build with uv
+├── dot.env.example                   # Sample environment configuration
+├── entrypoint.sh                     # Container entrypoint script
+├── pyproject.toml                    # Project metadata and dependencies
 ├── data/
-│   └── ble_data.db       # SQLite database (generated at runtime)
+│   └── ble_data.db                   # SQLite database (generated at runtime)
 └── src/
-    ├── main.py           # Application entrypoint & scanner lifecycle
-    ├── settings.py       # Configuration and environment variables
-    ├── parser.py         # BLE payload decoders (PVVX, ATC1441)
-    ├── db_writer.py      # Async SQLite batch writer & table schema
-    ├── watchdog.py       # Bluetooth stall watchdog worker
-    └── handler_signal.py # Cross-platform signal handlers
+    ├── main.py                       # Application entrypoint & scanner lifecycle
+    ├── settings.py                   # Configuration and environment variables
+    ├── hci_passive_scanner_protocol.py # Low-level HCI socket protocol handler (Linux fallback)
+    ├── parser.py                     # BLE payload decoders (PVVX, ATC1441)
+    ├── db_writer.py                  # Async SQLite batch writer & table schema
+    ├── watchdog.py                   # Bluetooth stall watchdog worker
+    └── handler_signal.py             # Cross-platform signal handlers
 ```
 
 ---
@@ -63,10 +104,10 @@ visualization.
 Telemetry is recorded into the SQLite database at `data/ble_data.db` under the table `atc_sensor_data`:
 
 | Column           | Type                  | Description                                        |
-|:-----------------|:----------------------|:---------------------------------------------------|
+|------------------|-----------------------|----------------------------------------------------|
 | `id`             | `INTEGER PRIMARY KEY` | Auto-incrementing record ID                        |
 | `timestamp`      | `REAL`                | Unix epoch timestamp (seconds)                     |
-| `mac_address`    | `TEXT`                | Device Bluetooth MAC address                       |
+| `mac_address`    | `TEXT`                | Device Bluetooth MAC address (`XX:XX:XX:XX:XX:XX`) |
 | `device_name`    | `TEXT`                | Local advertised name or generated ID              |
 | `rssi`           | `INTEGER`             | Received Signal Strength Indicator (dBm)           |
 | `temperature_c`  | `REAL`                | Temperature in Celsius                             |
@@ -88,160 +129,137 @@ cp dot.env.example .env
 
 ### Environment Variables
 
-| Variable                     | Default                                | Description                                                                                 |
-|:-----------------------------|:---------------------------------------|:--------------------------------------------------------------------------------------------|
-| `NAME_PREFIXES`              | `""` *(empty / all)*                   | Comma-separated list of device name prefixes to filter (e.g. `ATC_112233,ATC_`)             |
-| `ADDRESS_PREFIXES`           | `""` *(empty / all)*                   | Comma-separated list of device addresess prefixes to filter (e.g. `A1:C1:18:11:22:33,A1..`) |
-| `DEVICE_PREFIX_DEFAULT`      | `ATC_`                                 | Prefix prepended to device names when an explicit name is absent                            |
-| `LOG_LEVEL`                  | `INFO`                                 | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`)                                         |
-| `SCANNING_MODE`              | `auto`                                 | BLE scanning mode (`auto`, `active`, `passive`)                                             |
-| `WATCHDOG_TIMEOUT`           | `600`                                  | Inactivity threshold in seconds before watchdog flags a stall                               |
-| `UUID_ENVIRONMENTAL_SENSING` | `0000181a-0000-1000-8000-00805f9b34fb` | BLE Service Data UUID for Environmental Sensing (181A)                                      |
+| Variable                     | Default                                | Description                                                                            |
+|------------------------------|----------------------------------------|----------------------------------------------------------------------------------------|
+| `NAME_PREFIXES`              | `""` *(empty / all)*                   | Comma-separated list of device name prefixes to filter (e.g. `ATC_112233,ATC_`)        |
+| `ADDRESS_PREFIXES`           | `""` *(empty / all)*                   | Comma-separated list of device addresses prefixes to filter (e.g. `A4:C1:38,A1:C1:18`) |
+| `DEVICE_PREFIX_DEFAULT`      | `ATC_`                                 | Prefix prepended to device names when an explicit name is absent                       |
+| `LOG_LEVEL`                  | `INFO`                                 | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`)                                    |
+| `SCANNING_MODE`              | `auto`                                 | BLE scanning mode (`auto`, `active`, `passive`)                                        |
+| `WATCHDOG_TIMEOUT`           | `600`                                  | Inactivity threshold in seconds before watchdog flags a stall                          |
+| `UUID_ENVIRONMENTAL_SENSING` | `0000181a-0000-1000-8000-00805f9b34fb` | BLE Service Data UUID for Environmental Sensing (181A)                                 |
 
 ---
 
 ## Getting Started
 
-### Prerequisites
+### Local Setup (macOS / Windows / Linux)
 
-- **Bluetooth Adapter**: BLE-compatible Bluetooth 4.0+ hardware.
-- **Operating System**:
-    - Linux with **BlueZ** and DBus (recommended for production / 24x7 monitoring).
-    - Windows or macOS (for development and local testing).
-- **Python**: Python 3.13 or higher (or [uv](https://github.com/astral-sh/uv)).
-
----
-
-### Local Installation & Running
+You can run TermometerMonitor directly on your local machine without Docker or elevated root permissions in most OS environments.
 
 1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/lexsysko/TermometerMonitor.git
-   cd TermometerMonitor
-   ```
+
+```bash
+git clone [https://github.com/lexsysko/TermometerMonitor.git](https://github.com/lexsysko/TermometerMonitor.git)
+cd TermometerMonitor
+```
 
 2. **Install dependencies**:
    Using `uv`:
-   ```bash
-   uv sync
-   ```
-   Or standard `pip` / `venv`:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   pip install .
-   ```
 
-3. **Configure environment**:
-   ```bash
-   cp dot.env.example .env
-   # Edit .env to set prefixes or logging level
-   ```
+```bash
+uv sync
 
-4. **Run the monitor**:
-   ```bash
-   python src/main.py
-   ```
+```
+
+Or standard `pip`:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install .
+```
+
+3. **Run the monitor**:
+
+```bash
+uv run src/main.py
+```
+
+or
+
+```bash
+python src/main.py
+```
+
+*(Note: On Linux, if using the raw HCI fallback mode, ensure your user account has access to raw socket capabilities or run with
+`sudo setcap cap_net_raw,cap_net_admin+eip $(readlink -f $(which python))`)*
 
 ---
 
 ### Running with Docker Compose
 
-Running via Docker Compose is recommended on Linux hosts to ensure persistent background monitoring and integrated Grafana
-dashboarding.
-
-> **Note (Linux / BlueZ)**: Host network mode (`network_mode: host`) and access to `/var/run/dbus/system_bus_socket` along with
-> `NET_ADMIN` and `NET_RAW` capabilities are configured in `compose.yaml` to enable direct Bluetooth hardware access.
+Running via Docker Compose is ideal for dedicated monitoring servers (e.g., Raspberry Pi, home server) and includes Grafana
+visualization out of the box.
 
 1. **Start services**:
-   ```bash
-   docker compose up -d
-   ```
+
+```bash
+docker compose up -d
+```
 
 2. **Check monitor logs**:
-   ```bash
-   docker compose logs -f ble-monitor
-   ```
+
+```bash
+docker compose logs -f ble-monitor
+```
 
 3. **Open Grafana**:
-    - Access Grafana at: [http://localhost:3000](http://localhost:3000)
-    - Default login: `admin` / `admin` (or configured `GF_SECURITY_ADMIN_PASSWORD`)
-    - The SQLite plugin `frser-sqlite-datasource` is automatically installed.
-    - Set up SQLite datasource pointing to `/var/lib/grafana/sqlite_data/ble_data.db`.
+
+* Access Grafana at: [http://localhost:3000](http://localhost:3000)
+* Default login: `admin` / `admin`
+* Pre-configured datasource path: `/var/lib/grafana/sqlite_data/ble_data.db`.
+
+*Note: For Docker on Linux utilizing the HCI socket fallback, the container config uses `network_mode: host` and
+`cap_add: [NET_RAW, NET_ADMIN]`.*
+
+4. **SQL for Grafana**
+
+```sql
+SELECT
+  timestamp AS time,
+  COALESCE(NULLIF(device_name, ''), mac_address) AS metric,
+  temperature_c AS value
+FROM atc_sensor_data
+WHERE timestamp >= ($__from / 1000)
+  AND timestamp <= ($__to / 1000)
+  AND COALESCE(NULLIF(device_name, ''), mac_address) IN (${device:singlequote})
+ORDER BY timestamp ASC;
+```
+
+---
+
+## Linux Host Troubleshooting
+
+If running on Linux and the system drops down to the HCI socket fallback:
+
+```bash
+# 1. Install bluez/rfkill utilities if missing
+sudo apt update && sudo apt install -y bluez rfkill
+
+# 2. Unblock the Bluetooth radio
+sudo rfkill unblock bluetooth
+
+# 3. Ensure the HCI interface is active
+sudo hciconfig hci0 up
+
+```
 
 ---
 
 ## Supported Hardware & Firmware
 
-This project is tested and compatible with:
+* **Xiaomi Mijia Bluetooth Thermometer 2 (LYWSD03MMC)**
+* Custom firmwares:
+* [pvvx/ATC_MiThermometer](https://github.com/pvvx/ATC_MiThermometer)
+* [atc1441/ATC_MiThermometer](https://github.com/atc1441/ATC_MiThermometer)
 
-- **Xiaomi Mijia Bluetooth Thermometer 2 (LYWSD03MMC)**
-- Custom firmwares:
-    - [pvvx/ATC_MiThermometer](https://github.com/pvvx/ATC_MiThermometer)
-    - [atc1441/ATC_MiThermometer](https://github.com/atc1441/ATC_MiThermometer)
-- Any BLE broadcaster sending standard `0x181A` environmental service advertisement payloads.
 
-## Ubuntu server headless
-
-```bash
-# 1. Install bluez on the host if missing
-sudo apt update && sudo apt install -y bluez rfkill
-
-# 2. Check if bluetooth is blocked by rfkill
-sudo rfkill unblock bluetooth
-
-# 3. Enable and start the Bluetooth service
-sudo systemctl enable --now bluetooth
-
-# 4. Verify BlueZ is active and registered on D-Bus
-sudo systemctl status bluetooth
-```
-
-### Resolve problems with passive mode
-
-BlueZ passive scanning with advertisement pattern filtering requires both Kernel >= 5.10 and the BlueZ experimental interface flag
-enabled on the host machine.
-
-Without --experimental turned on in the host's bluetooth.service, BlueZ refuses to expose the AdvertisementMonitor1 D-Bus
-interface that Bleak relies on for passive pattern filtering.
-
-#### Solution: Enable BlueZ Experimental Features on Host
-
-1. Edit the host's systemd service for Bluetooth:
-
-```bash
-sudo systemctl edit bluetooth.service
-```
-
-2. Add the experimental flag:
-   Paste the following configuration into the file override and save:
-
-```toml
-[Service]
-ExecStart =
-ExecStart = /usr/libexec/bluetooth/bluetoothd --experimental
-```
-
-> (Note: On older Ubuntu versions, the binary path might be /usr/lib/bluetooth/bluetoothd).
-
-3. Reload systemd and restart the service:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart bluetooth
- 
-```
-
-4. Verify --experimental is active:
-
-```bash
-systemctl status bluetooth
-```
-
-Look for `bluetoothd --experimental` in the active process line.
+* Any BLE broadcaster sending standard `0x181A` environmental service advertisement payloads.
 
 ---
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [MIT License](https://www.google.com/search?q=LICENSE).
+

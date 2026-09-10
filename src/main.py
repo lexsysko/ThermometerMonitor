@@ -48,7 +48,7 @@ def generate_device_name(device):
     return None
 
 
-def ble_callback(device, advertising_data, *args, **kwargs):
+def ble_callback(device, advertising_data):
     if shutdown_event.is_set():
         return
     last_counter_data["last_packet_time"] = time.time()
