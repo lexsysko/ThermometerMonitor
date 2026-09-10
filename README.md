@@ -1,6 +1,6 @@
 # ThermometerMonitor
 
-[![Python Version](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/)
+[![Python Version](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **ThermometerMonitor** is an asynchronous Bluetooth Low Energy (BLE) environmental monitor and telemetry logger. It continuously
@@ -87,13 +87,14 @@ visualization.
 ├── pyproject.toml                    # Project metadata and dependencies
 ├── data/
 │   └── ble_data.db                   # SQLite database (generated at runtime)
-└── src/
+└── src/ThermometerMonitor/
     ├── main.py                       # Application entrypoint & scanner lifecycle
     ├── settings.py                   # Configuration and environment variables
     ├── hci_passive_scanner_protocol.py # Low-level HCI socket protocol handler (Linux fallback)
     ├── parser.py                     # BLE payload decoders (PVVX, ATC1441)
     ├── db_writer.py                  # Async SQLite batch writer & table schema
     ├── watchdog.py                   # Bluetooth stall watchdog worker
+    ├── start_scanning.py             # Bluetooth multiplatform start scanner 
     └── handler_signal.py             # Cross-platform signal handlers
 ```
 
