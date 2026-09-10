@@ -1,6 +1,6 @@
 [project]
 name = "termometermonitor"
-version = "0.1.0"
+version = "0.2.0"
 description = "Store metrics from BLE devices"
 authors = ["lexsys.ko <lexsys.ko@gmail.com>"]
 license = "MIT"
@@ -8,6 +8,7 @@ readme = "README.md"
 
 requires-python = ">=3.13"
 dependencies = [
+    "aioblescan>=0.2.14; sys_platform == 'linux'",
     "bleak>=3.0.2",
     "python-dotenv>=1.2.3",
 ]

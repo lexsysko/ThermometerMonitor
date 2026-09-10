@@ -1,6 +1,10 @@
 import asyncio
 import logging
 import time
+from inspect import iscoroutinefunction
+from typing import Callable
+
+from bleak import BleakScanner
 
 from db_writer import db_writer_worker
 from db_writer import init_db
@@ -44,7 +48,7 @@ def generate_device_name(device):
     return None
 
 
-def ble_callback(device, advertising_data):
+def ble_callback(device, advertising_data, *args, **kwargs):
     if shutdown_event.is_set():
         return
     last_counter_data["last_packet_time"] = time.time()
@@ -125,7 +129,21 @@ async def main():
     watchdog_task.cancel()
 
     try:
-        await scanner.stop()
+        if isinstance(scanner, BleakScanner):
+            await scanner.stop()
+        elif hasattr(scanner, "stop") and callable(scanner.stop):
+            # Calls the stop() method on HCIPassiveScannerProtocol
+
+            if iscoroutinefunction(scanner.stop):
+                await scanner.stop()
+            else:
+                scanner.stop()
+        elif (
+            hasattr(scanner, "stop_scan_request")
+            and callable(scanner.stop_scan_request)
+            and iscoroutinefunction(scanner.stop_scan_request)
+        ):
+            await scanner.stop_scan_request()
     except Exception as e:
         logger.warning(f"[BLE] Exception while stopping scanner: {e}")
 

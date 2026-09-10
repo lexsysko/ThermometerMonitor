@@ -10,6 +10,15 @@ exclude-newer-span = "P7D"
 some-urgent-package = false
 
 [[package]]
+name = "aioblescan"
+version = "0.2.14"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/45/15/faf503083bc5a2d81f1b17fbbe30d15f35217b6c5e944c771c8760354d59/aioblescan-0.2.14.tar.gz", hash = "sha256:3a47c5292186ee87fc49cb076a5271c766510f44749b93ac4a32bbb4cb5258a0", size = 24937, upload-time = "2023-01-07T10:02:02.157Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2a/4c/b8e1a16c5baf299b540dd4a21c1b804651d9d7a1b2f459557d94f16c2baa/aioblescan-0.2.14-py3-none-any.whl", hash = "sha256:1e38977bc207f658ac1e21db21a58e941ba9da6c362a889f4113d80e1cf86fbd", size = 27862, upload-time = "2023-01-07T10:02:00.015Z" },
+]
+
+[[package]]
 name = "bleak"
 version = "3.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -138,15 +147,17 @@ wheels = [
 
 [[package]]
 name = "termometermonitor"
-version = "0.1.0"
+version = "0.2.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "aioblescan", marker = "sys_platform == 'linux'" },
     { name = "bleak" },
     { name = "python-dotenv" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "aioblescan", marker = "sys_platform == 'linux'", specifier = ">=0.2.14" },
     { name = "bleak", specifier = ">=3.0.2" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
 ]
