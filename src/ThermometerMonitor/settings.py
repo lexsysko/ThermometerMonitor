@@ -22,9 +22,9 @@ else:
     DB_PATH = BASE_PATH / "data/ble_data.db"
     if not DB_PATH.parent.exists():
         # Safe for both CLI package execution and local development
-        DB_PATH = Path.cwd() / "data" / "ble_data.db"
-        DB_PATH.parent.mkdir(exist_ok=True, parents=True)
+        DB_PATH = Path.cwd() / "data/ble_data.db"
 
+DB_PATH.parent.mkdir(exist_ok=True, parents=True)
 
 SCANNING_MODE: str = environ.get("SCANNING_MODE", "auto")
 WATCHDOG_TIMEOUT: int = int(environ.get("WATCHDOG_TIMEOUT", 600))
