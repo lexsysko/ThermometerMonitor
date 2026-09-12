@@ -4,12 +4,8 @@ services:
     build: .
     env_file:
       - .env
-
-    #    environment:
-    #      SCANNING_MODE: active
-
-    network_mode: host
     init: true
+    network_mode: host
     stop_grace_period: 15s
     # Disable AppArmor confinement for raw D-Bus socket access
     security_opt:

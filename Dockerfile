@@ -27,15 +27,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
-ARG _USER=appuser
-ARG _GROUP=appgroup
 ARG APP_PORT
 
 WORKDIR /app
 
-RUN groupadd ${_GROUP} && useradd --no-log-init -r --no-create-home -g ${_GROUP} ${_USER} && \
-    mkdir ./data && \
-    chown -R  ${_USER}:${_GROUP} ./data
+#ARG _USER=appuser
+#ARG _GROUP=appgroup
+#RUN groupadd ${_GROUP} && useradd --no-log-init -r --no-create-home -g ${_GROUP} ${_USER} && \
+#    mkdir ./data && \
+#    chown -R  ${_USER}:${_GROUP} ./data
 
 
 # Copy venv from previous stage "builder"
@@ -48,5 +48,5 @@ ENV PATH="/opt/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYT
 
 #USER ${_USER}
 
-CMD ["/bin/bash", "-c", "/app/entrypoint.sh"]
+CMD ["/app/entrypoint.sh"]
 

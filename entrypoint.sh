@@ -1,3 +1,3 @@
 #!/bin/sh
 
-python -u /app/src/ThermometerMonitor/main.py
+exec python -u /app/src/ThermometerMonitor/main.py
