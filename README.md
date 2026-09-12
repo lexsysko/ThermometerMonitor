@@ -138,8 +138,11 @@ cp dot.env.example .env
 | `LOG_LEVEL`                  | `INFO`                                 | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`)                                    |
 | `SCANNING_MODE`              | `auto`                                 | BLE scanning mode (`auto`, `active`, `passive`)                                        |
 | `WATCHDOG_TIMEOUT`           | `600`                                  | Inactivity threshold in seconds before watchdog flags a stall                          |
+| `CLEANUP_TIMEOUT`            | `86400`                                | Interval in seconds between database cleanup routines (default: 24 hours)              |
+| `CLEANUP_PERIOD_DAYS`        | `30`                                   | Age threshold in days for retaining records; older records are purged (0 to disable)   |
 | `UUID_ENVIRONMENTAL_SENSING` | `0000181a-0000-1000-8000-00805f9b34fb` | BLE Service Data UUID for Environmental Sensing (181A)                                 |
 | `DB_PATH`                    | `data/ble_data.db`                     | Path to the SQLite database file                                                       |
+| `BATCH_FLUSH_DB_TIMEOUT`     | `30`                                   | Interval in seconds for wait next data for batch database write                        |
 
 ---
 

@@ -21,7 +21,9 @@ def is_linux():
     return platform.system() == "Linux"
 
 
-async def aio_bt_scanner(callback: Callable, scanning_mode: str = "passive", **kwargs):
+async def aio_bt_scanner(
+    callback: Callable, scanning_mode: str = "passive", filter_addresses: tuple[str] | None = None, **kwargs
+):
     if not is_linux():
         logger.warning(f"Only for Linux OS. Now is: {platform.system()}")
         return None
@@ -29,43 +31,6 @@ async def aio_bt_scanner(callback: Callable, scanning_mode: str = "passive", **k
     logger.info("Load 'aioblescan' library for access to HCI Event")
 
     import aioblescan as aiobs  # noqa
-
-    def _hci_process(data):
-        ev = aiobs.HCI_Event()
-        raw_packet = ev.decode(data)
-
-        # 1. Extract raw fields from aioblescan
-        mac_list = ev.retrieve("peer")
-        rssi_list = ev.retrieve("rssi")
-        local_name_list = ev.retrieve("COMPLETE LOCAL NAME") or ev.retrieve("SHORTENED LOCAL NAME")
-
-        mac_address = str(mac_list[0]).upper() if mac_list else ""
-        rssi = rssi_list[0] if rssi_list else 0
-        local_name = local_name_list[0] if local_name_list else None
-
-        # 2. Extract Service Data (16-bit UUIDs e.g., 0x181A for Environmental Sensing)
-        service_data = {}
-
-        # aioblescan returns raw AD payload structures
-        for ad_struct in getattr(ev, "adv_payload", []):
-            # Check for Service Data - 16-bit UUID (Type 0x16)
-            if hasattr(ad_struct, "type") and ad_struct.type == 0x16:
-                raw_payload = ad_struct.payload
-                if len(raw_payload) >= 2:
-                    # First 2 bytes are the 16-bit UUID in little-endian format
-                    uuid_16 = (raw_payload[1] << 8) | raw_payload[0]
-                    uuid_str = f"{uuid_16:08x}-0000-1000-8000-00805f9b34fb"
-                    payload_bytes = bytes(raw_payload[2:])
-                    service_data[uuid_str] = payload_bytes
-
-        # 3. Construct Bleak-compatible mock objects
-        device = SimpleNamespace(address=mac_address, name=local_name)
-
-        advertising_data = SimpleNamespace(local_name=local_name, service_data=service_data, rssi=rssi)
-
-        # 4. Invoke your existing callback
-        if callable(callback):
-            callback(device, advertising_data)
 
     event_loop = asyncio.get_running_loop()
     bt_socket = aiobs.create_bt_socket(0)
@@ -75,7 +40,7 @@ async def aio_bt_scanner(callback: Callable, scanning_mode: str = "passive", **k
     # Use DatagramProtocol wrapper compatible with Python 3.10 - 3.14+
     transport, protocol = await event_loop.create_datagram_endpoint(
         lambda: HCIPassiveScannerProtocol(
-            process_callback=callback, is_active=is_active, filter_addresses=ADDRESS_PREFIXES
+            process_callback=callback, is_active=is_active, filter_addresses=filter_addresses
         ),
         sock=bt_socket,
     )
@@ -139,7 +104,8 @@ async def start_scanning(mode: str, callback: Callable) -> Any | None:
                     options = {"bluez": bluez_passive_args}
                 else:
                     # fallback to use aioblescan with HCI Event access
-                    scanner = await aio_bt_scanner(callback, scanning_mode=mode)
+                    filter_addresses = None
+                    scanner = await aio_bt_scanner(callback, scanning_mode=mode, filter_addresses=filter_addresses)
                     if scanner is not None:
                         return scanner
             scanner = BleakScanner(callback, scanning_mode=mode, **options)

@@ -19,7 +19,7 @@ async def bluetooth_watchdog(timeout_seconds=60):
     while not shutdown_event.is_set():
         await asyncio.sleep((timeout_seconds // 10) or 1)
         last_packet_time: float = settings.last_counter_data.get("last_packet_time", 0.0)
-        time_since_last_packet = time.time() - last_packet_time
+        time_since_last_packet = time.monotonic() - last_packet_time
 
         logger.debug(f"[Watchdog] Heartbeat check | Secs since last packet: {time_since_last_packet:.1f}s")
 
