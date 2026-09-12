@@ -6,6 +6,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from ThermometerMonitor import __version__
+
 BASE_PATH = Path(__file__).parent.parent.parent
 
 for folder in (Path.cwd(), BASE_PATH):
@@ -25,9 +27,11 @@ else:
         DB_PATH = Path.cwd() / "data/ble_data.db"
 
 DB_PATH.parent.mkdir(exist_ok=True, parents=True)
-
+APP_VERSION = __version__
 SCANNING_MODE: str = environ.get("SCANNING_MODE", "auto")
 WATCHDOG_TIMEOUT: int = int(environ.get("WATCHDOG_TIMEOUT", 600))
+CLEANUP_TIMEOUT: int = int(environ.get("CLEANUP_TIMEOUT", 60 * 60 * 24))
+CLEANUP_PERIOD_DAYS: int = int(environ.get("CLEANUP_PERIOD_DAYS", 30))
 LOG_LEVEL = getattr(logging, environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
 DEVICE_PREFIX_DEFAULT: str = environ.get("DEVICE_PREFIX_DEFAULT", "ATC_")
 DEBUG_EVENTS: bool = environ.get("DEBUG_EVENTS", "f").strip()[0].lower() == "t"

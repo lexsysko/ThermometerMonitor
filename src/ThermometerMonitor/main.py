@@ -7,7 +7,7 @@ from pathlib import Path
 from bleak import BleakScanner
 
 from ThermometerMonitor import settings
-from ThermometerMonitor.db_writer import db_writer_worker, init_db
+from ThermometerMonitor.db_writer import db_writer_worker, init_db, db_cleanup_worker
 from ThermometerMonitor.handler_signal import setup_signal_handlers
 from ThermometerMonitor.parser import parse_atc_payload, Payload
 from ThermometerMonitor.start_scanning import start_scanning
@@ -93,6 +93,7 @@ def ble_callback(device, advertising_data):
 
 
 async def main():
+    logger.info(f"Version of app: {settings.APP_VERSION}")
     shutdown_event = settings.get_shutdown_event()
     db_queue = settings.get_db_queue()
 
@@ -101,6 +102,7 @@ async def main():
     setup_signal_handlers(loop)
 
     writer_task = asyncio.create_task(db_writer_worker())
+    cleanup_task = asyncio.create_task(db_cleanup_worker())
 
     scanner = await start_scanning(mode=settings.SCANNING_MODE, callback=ble_callback)
 
@@ -141,6 +143,7 @@ async def main():
     logger.info("[DB] Flushing remaining queue items...")
     await db_queue.join()
     await writer_task
+    await cleanup_task
     logger.info("[System] Shutdown complete.")
 
 
