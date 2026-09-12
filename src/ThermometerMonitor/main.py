@@ -142,7 +142,9 @@ async def main():
 
     logger.info("[DB] Flushing remaining queue items...")
     await db_queue.join()
+    logger.info("[System] Finishing writer task")
     await writer_task
+    logger.info("[System] Finishing cleanup task")
     await cleanup_task
     logger.info("[System] Shutdown complete.")
 

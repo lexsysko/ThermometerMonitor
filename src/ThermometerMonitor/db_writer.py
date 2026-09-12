@@ -73,9 +73,32 @@ async def db_writer_worker(db_path=settings.DB_PATH):
         try:
             while not (shutdown_event.is_set() and queue.empty()):
                 try:
-                    item = await asyncio.wait_for(queue.get(), timeout=settings.BATCH_FLUSH_DB_TIMEOUT)
-                    batch.append(item)
-                    queue.task_done()
+                    get_task = asyncio.create_task(queue.get())
+                    shutdown_task = asyncio.create_task(shutdown_event.wait())
+
+                    done, pending = await asyncio.wait(
+                        {get_task, shutdown_task},
+                        timeout=settings.BATCH_FLUSH_DB_TIMEOUT,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+
+                    # Clean up tasks that did not complete
+                    for task in pending:
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+
+                    if get_task in done:
+                        item = get_task.result()
+                        batch.append(item)
+                        queue.task_done()
+                    elif shutdown_task in done:
+                        logger.info("Shutdown event received, stopping worker...")
+                    else:
+                        # Timed out without getting an item or shutdown signal
+                        await flush_batch()
 
                     if len(batch) >= 10:
                         await flush_batch()
