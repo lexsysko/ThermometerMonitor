@@ -39,7 +39,7 @@ def generate_device_name(device):
 def ble_callback(device, advertising_data):
     if settings.get_shutdown_event().is_set():
         return
-    settings.last_counter_data["last_packet_time"] = time.time()
+    settings.last_counter_data["last_packet_time"] = time.monotonic()
 
     name = advertising_data.local_name or device.name or generate_device_name(device) or device.address or ""
     if settings.DEBUG_EVENTS:
@@ -97,7 +97,7 @@ async def main():
     shutdown_event = settings.get_shutdown_event()
     db_queue = settings.get_db_queue()
 
-    init_db()
+    await init_db()
     loop = asyncio.get_running_loop()
     setup_signal_handlers(loop)
 

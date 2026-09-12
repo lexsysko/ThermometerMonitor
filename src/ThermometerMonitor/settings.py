@@ -32,6 +32,7 @@ SCANNING_MODE: str = environ.get("SCANNING_MODE", "auto")
 WATCHDOG_TIMEOUT: int = int(environ.get("WATCHDOG_TIMEOUT", 600))
 CLEANUP_TIMEOUT: int = int(environ.get("CLEANUP_TIMEOUT", 60 * 60 * 24))
 CLEANUP_PERIOD_DAYS: int = int(environ.get("CLEANUP_PERIOD_DAYS", 30))
+BATCH_FLUSH_DB_TIMEOUT: int = int(environ.get("BATCH_FLUSH_DB_TIMEOUT", 30))
 LOG_LEVEL = getattr(logging, environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
 DEVICE_PREFIX_DEFAULT: str = environ.get("DEVICE_PREFIX_DEFAULT", "ATC_")
 DEBUG_EVENTS: bool = environ.get("DEBUG_EVENTS", "f").strip()[0].lower() == "t"

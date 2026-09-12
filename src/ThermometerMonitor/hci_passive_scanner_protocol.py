@@ -51,7 +51,7 @@ class HCIPassiveScannerProtocol(asyncio.DatagramProtocol):
         if sock:
             self._sock_fd = sock.fileno()
 
-        import aioblescan as aiobs
+        import aioblescan as aiobs  # noqa
 
         try:
             # 1. Configure HCI scan parameters (0 = Passive, 1 = Active)
@@ -70,7 +70,7 @@ class HCIPassiveScannerProtocol(asyncio.DatagramProtocol):
     async def stop(self):
         """Sends disable command to HCI controller and closes transport."""
         logger.info("Stopping HCI BLE Scanner...")
-        import aioblescan as aiobs
+        import aioblescan as aiobs  # noqa
 
         # Send command to disable scanning
         disable_cmd = aiobs.HCI_Cmd_LE_Scan_Enable(enable=False)
@@ -81,7 +81,7 @@ class HCIPassiveScannerProtocol(asyncio.DatagramProtocol):
             self.transport.close()
 
     def datagram_received(self, data: bytes, addr):
-        import aioblescan as aiobs
+        import aioblescan as aiobs  # noqa
 
         ev = aiobs.HCI_Event()
         try:
